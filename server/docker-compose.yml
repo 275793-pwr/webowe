@@ -1,0 +1,10 @@
+services:
+  app:
+    build: .
+    container_name: slow-blog
+    ports:
+      - "3000:3000"   # PERF: Node serves HTML + ~2.3 GB of media (mostly the background video) directly; no reverse proxy / CDN in front.
+    environment:
+      - PORT=3000
+    # PERF: no resource limits or healthcheck.
+    restart: unless-stopped

@@ -1,0 +1,18 @@
+{
+  "name": "slow-blog",
+  "version": "1.0.0",
+  "description": "Intentionally UNOPTIMIZED demo app for web performance exercises",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@fortawesome/fontawesome-free": "^7.3.1",
+    "bootstrap": "^5.3.8",
+    "jquery": "^3.7.1",
+    "moment": "^2.30.1"
+  }
+}
