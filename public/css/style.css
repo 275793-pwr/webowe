@@ -1,0 +1,20 @@
+@import url("/css/theme.css");
+
+html, body { background: transparent; }  /* let the background video show through */
+body { font-family: Arial, sans-serif; }
+.card { background: rgba(255,255,255,.95); }
+
+#bg-video {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  object-fit: cover; z-index: -1;
+  opacity: 0.5;
+  filter: blur(5px);          /* PERF: blur on a full-screen video is repainted every frame */
+  transform: scale(1.05);     /* hides the soft edges the blur creates at the viewport border */
+}
+
+#glow-footer {
+  color: #fff; font-size: 1.2rem; position: relative;
+  background: linear-gradient(90deg, #ff0080, #7928ca, #2afadf);
+}
+/* PERF: box-shadow (also animated from JS) is paint-heavy, not compositor-only. */
+#glow-footer:hover { box-shadow: 0 0 60px 20px #ff0080 inset; }

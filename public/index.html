@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Wrocław bez tajemnic</title>
+  <!-- PERF: no viewport meta, no favicon, no preload/preconnect hints. -->
+
+  <!-- PERF: all vendor CSS/JS is loaded in <head> and blocks first paint. Everything is unminified,
+       self-hosted on the slow origin (no CDN), and mostly unused (Bootstrap grid/components, ~1500 icons). -->
+  <link rel="stylesheet" href="/vendor/bootstrap.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.css"> <!-- PERF: whole icon set + 4 webfonts for a handful of icons -->
+
+  <!-- PERF: style.css also @imports theme.css, which delays it by an extra round trip. -->
+  <link rel="stylesheet" href="/css/style.css">
+
+  <!-- PERF: render-blocking scripts (no defer/async). -->
+  <script src="/vendor/jquery.js"></script>
+  <script src="/vendor/bootstrap.bundle.js"></script>
+  <script src="/vendor/moment.js"></script>
+  <script src="/js/analytics.js"></script>
+</head>
+<body>
+  <!-- PERF: 2.3 GB video used as a full-screen background: autoplay, preload="auto", no poster,
+       single MP4 format, always decoding behind the page; it competes with the post images and API calls for bandwidth. -->
+  <video src="/video/1.webm" autoplay muted loop preload="auto" playsinline id="bg-video"></video>
+
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand" href="#"><i class="fa-solid fa-newspaper"></i> Wrocław bez tajemnic</a>
+      <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav"><span class="navbar-toggler-icon"></span></button>
+      <div class="collapse navbar-collapse" id="nav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container my-4">
+    <div id="posts" class="row g-4"></div>
+  </main>
+
+  <footer id="glow-footer" class="text-center py-5">&copy; <span id="year"></span> Wrocław bez tajemnic
+    <div class="small mt-2">
+      Wideo w tle: <a href="https://www.youtube.com/watch?v=y0zmzO-t2XM" target="_blank" rel="noopener" class="text-white">YouTube</a>
+      &middot; Autorzy: Mateusz Szwedka, Ivan Hancharyk, Jędrzej Kozina
+    </div>
+  </footer>
+
+  <!-- PERF: unminified, unbundled scripts at the end of body, not deferred. -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
