@@ -151,3 +151,58 @@ Run 4 shows whether the effects add up. Expect overlap: B's `immutable` caching 
 - Each single optimization improves at least its main metrics (see the first table) with no regression elsewhere.
 - Combined result beats every single variant on the Lighthouse score. Any metric where A+B+C is worse than the best single variant gets investigated.
 - Functional check on every variant: five posts render in order with correct Polish dates, images load, the navbar collapses on mobile, the footer glow animates, and `/api/track` still receives `page_load`.
+
+
+## Optimization 1.
+
+```sh
+mkdir -p img/out
+for f in img/[1-5].jpg; do
+  n=$(basename "$f" .jpg)
+  for w in 480 800 1200; do
+    # AVIF (best compression)
+    ffmpeg -y -i "$f" -vf "scale=$w:-2:flags=lanczos" \
+      -c:v libaom-av1 -crf 32 -b:v 0 -cpu-used 6 -still-picture 1 \
+      "img/out/$n-$w.avif"
+    # WebP (wide support)
+    ffmpeg -y -i "$f" -vf "scale=$w:-2:flags=lanczos" \
+      -c:v libwebp -quality 78 -compression_level 6 \
+      "img/out/$n-$w.webp"
+    # JPEG fallback
+    ffmpeg -y -i "$f" -vf "scale=$w:-2:flags=lanczos" \
+      -q:v 4 -map_metadata -1 -pix_fmt yuvj420p \
+      "img/out/$n-$w.jpg"
+  done
+done
+
+
+
+VF="scale=1080:-2:flags=lanczos,fps=24,gblur=sigma=5"
+
+# VP9 (two-pass, ~2-4 MB)
+ffmpeg -y -ss 0 -t 15 -i video/1.webm -vf "$VF" -an \
+  -c:v libvpx-vp9 -b:v 0 -crf 38 -row-mt 1 -pass 1 -f null /dev/null
+
+
+ffmpeg -y -ss 0 -t 15 -i video/1.webm -vf "scale=1080:-2:flags=lanczos,fps=24,gblur=sigma=5" -an \
+  -c:v libvpx-vp9 -b:v 0 -crf 38 -row-mt 1 -pass 2 video/bg.webm
+
+
+
+# H.264 fallback (Safari/older browsers)
+ffmpeg -y -ss 0 -t 15 -i video/1.webm -vf "$VF" -an \
+  -c:v libx264 -preset slow -crf 30 -pix_fmt yuv420p -movflags +faststart \
+  video/bg.mp4
+
+# Poster frame
+ffmpeg -y -ss 1 -i video/1.webm -vf "scale=1280:-2,gblur=sigma=5" -frames:v 1 \
+  -c:v libaom-av1 -crf 36 -b:v 0 -still-picture 1 img/out/bg-poster.avif
+
+
+
+
+
+ffmpeg -y -i 1.webm -vf "scale=1080:-2:flags=lanczos,fps=24,gblur=sigma=5" -an -c:v libvpx-vp9 -b:v 0 -crf 46 -row-mt 1 bg.webm
+
+ffmpeg -i img/1.jpg -vf "scale=-2:720" -c:v libwebp -quality 60 img/1.webp
+```
