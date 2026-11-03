@@ -4,10 +4,10 @@
   var start = Date.now();
   while (Date.now() - start < 100) { Math.sqrt(Math.random()); }
   window.track = function (e) {
-    // PERF: synchronous XHR blocks the main thread; use navigator.sendBeacon instead.
-    var x = new XMLHttpRequest();
-    x.open('POST', '/api/track', false);
-    x.setRequestHeader('Content-Type', 'application/json');
-    x.send(JSON.stringify({ e: e, t: Date.now() }));
+    // sendBeacon is asynchronous and survives page unload; fall back to fetch keepalive.
+    var body = JSON.stringify({ e: e, t: Date.now() });
+    if (!(navigator.sendBeacon && navigator.sendBeacon('/api/track', new Blob([body], { type: 'application/json' })))) {
+      fetch('/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true });
+    }
   };
 })();

@@ -2,25 +2,19 @@
 $('#year').text(new Date().getFullYear());
 track('page_load');
 
-// PERF: N+1 - fetch the list, then fetch each post one after another (request waterfall).
+// One request returns all posts (the server no longer needs an N+1 round of detail calls).
 $.getJSON('/api/posts', function (list) {
-  (function next(i) {
-    if (i >= list.length) return;
-    $.getJSON('/api/posts/' + list[i].id, function (p) {
-      // PERF: all of moment.js is shipped just to format a date.
-      var date = moment(p.date).format('D MMMM YYYY');
-      $('#posts').append(
-        '<div class="col-md-6"><div class="card h-100">' +
-        '<img class="card-img-top" src="' + p.image + '" alt="">' +   // PERF: full-size image in a card, eager
-        '<div class="card-body"><h5 class="card-title">' + p.title + '</h5>' +
-        '<small class="text-muted"><i class="fa-regular fa-calendar"></i> ' + date + '</small>' +
-        '<p class="card-text mt-2">' + p.body + '</p>' +
-        '<small class="text-muted"><i class="fa-regular fa-image"></i> Zdjęcie: <a href="' + p.credit + '" target="_blank" rel="noopener">Pixabay</a></small>' +
-        '</div></div></div>'
-      );
-      next(i + 1);
-    });
-  })(0);
+  var html = list.map(function (p) {
+    var date = moment(p.date).format('D MMMM YYYY');
+    return '<div class="col-md-6"><div class="card h-100">' +
+      '<img class="card-img-top" src="' + p.image + '" alt="">' +
+      '<div class="card-body"><h5 class="card-title">' + p.title + '</h5>' +
+      '<small class="text-muted"><i class="fa-regular fa-calendar"></i> ' + date + '</small>' +
+      '<p class="card-text mt-2">' + p.body + '</p>' +
+      '<small class="text-muted"><i class="fa-regular fa-image"></i> Zdjęcie: <a href="' + p.credit + '" target="_blank" rel="noopener">Pixabay</a></small>' +
+      '</div></div></div>';
+  }).join('');
+  $('#posts').append(html);
 });
 
 // Animated footer: the gradient hue cycles and the glow follows the cursor.

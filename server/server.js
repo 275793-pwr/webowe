@@ -6,20 +6,66 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// PERF: no compression middleware, so HTML/CSS/JS/JSON go out uncompressed.
-// PERF: no Cache-Control on static assets (only default ETag), so images are re-validated/re-downloaded.
+const zlib = require('zlib');
 
-// PERF: synchronous file write on every request.
+// Compression: Brotli/gzip for text responses (HTML, CSS, JS, JSON, SVG), no extra dependency.
+const COMPRESSIBLE = /text|json|javascript|svg|xml/;
 app.use((req, res, next) => {
-  fs.appendFileSync(path.join(__dirname, 'access.log'), `${new Date().toISOString()} ${req.method} ${req.url}\n`);
+  const ae = req.headers['accept-encoding'] || '';
+  const enc = /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gzip' : null;
+  if (!enc) return next();
+  res.append('Vary', 'Accept-Encoding');
+  const write = res.write.bind(res), end = res.end.bind(res);
+  let stream;
+  const init = () => {
+    if (stream !== undefined) return stream;
+    const type = String(res.getHeader('Content-Type') || '');
+    if (res.getHeader('Content-Encoding') || res.statusCode === 204 || res.statusCode === 304 || req.method === 'HEAD' || !COMPRESSIBLE.test(type)) {
+      return (stream = null);
+    }
+    stream = enc === 'br'
+      ? zlib.createBrotliCompress({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } })
+      : zlib.createGzip();
+    res.setHeader('Content-Encoding', enc);
+    res.removeHeader('Content-Length');
+    stream.on('data', chunk => write(chunk));
+    stream.on('end', () => end());
+    return stream;
+  };
+  res.write = (chunk, encoding, cb) => { const s = init(); return s ? s.write(chunk, encoding, cb) : write(chunk, encoding, cb); };
+  res.end = (chunk, encoding, cb) => {
+    const s = init();
+    if (!s) return end(chunk, encoding, cb);
+    if (typeof chunk === 'function') chunk = undefined;
+    if (chunk) s.write(chunk, typeof encoding === 'string' ? encoding : undefined);
+    s.end();
+    return res;
+  };
+  next();
+});
+
+// Non-blocking logging: append-mode write streams instead of appendFileSync on every request.
+const accessLog = fs.createWriteStream(path.join(__dirname, 'access.log'), { flags: 'a' });
+const eventsLog = fs.createWriteStream(path.join(__dirname, 'events.log'), { flags: 'a' });
+app.use((req, res, next) => {
+  accessLog.write(`${new Date().toISOString()} ${req.method} ${req.url}\n`);
   next();
 });
 
 // Simulated network/database latency.
 app.use((req, res, next) => setTimeout(next, 50 + Math.random() * 100));
 
-// PERF: static files served by Node directly, no CDN or reverse proxy.
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// Caching: HTML and own CSS/JS are revalidated through ETag (their names are not fingerprinted),
+// libraries, images, video and fonts are cached for a year (replace the file under a new name to change it).
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  setHeaders(res, file) {
+    if (/\.(html|css|js)$/.test(file) && !file.includes(`${path.sep}vendor${path.sep}`)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
+}));
 
 const POSTS = [
   {
@@ -64,9 +110,10 @@ const POSTS = [
   }
 ];
 
-// PERF: only ids/titles are returned here; the client then requests every post separately (N+1).
+// Full posts in a single response (no N+1 on the client); short cache with background revalidation.
 app.get('/api/posts', (req, res) => {
-  res.json(POSTS.map(({ id, title }) => ({ id, title })));
+  res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+  res.json(POSTS);
 });
 
 app.get('/api/posts/:id', (req, res) => {
@@ -74,9 +121,8 @@ app.get('/api/posts/:id', (req, res) => {
   post ? res.json(post) : res.status(404).json({ error: 'not found' });
 });
 
-// PERF: synchronous disk write per tracking event.
 app.post('/api/track', express.json(), (req, res) => {
-  fs.appendFileSync(path.join(__dirname, 'events.log'), JSON.stringify(req.body) + '\n');
+  eventsLog.write(JSON.stringify(req.body) + '\n');
   res.sendStatus(204);
 });
 
