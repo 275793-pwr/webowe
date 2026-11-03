@@ -1,0 +1,127 @@
+% Wymaga: booktabs. Nie wymaga pakietu float.
+\makeatletter
+\@ifundefined{tablehere}{\newenvironment{tablehere}{\par\vskip\intextsep\def\@captype{table}\begin{center}}{\end{center}\par\vskip\intextsep}}{}
+\makeatother
+
+
+\subsection{Optymalizacja front-endu}
+\subsubsection{Opis optymalizacji}
+
+W pierwotnej wersji serwisu przeglądarka musiała pobrać i wykonać cztery biblioteki:
+Bootstrap (CSS ok.\ 280\,KB, JS ok.\ 208\,KB), Font Awesome (CSS ok.\ 130\,KB
+i czcionki), jQuery (285\,KB) i moment.js (183\,KB), z których strona używała
+niewielkiego ułamka: kilku klas Bootstrapa, przełącznika menu, trzech ikon,
+żądań JSON, wstawiania elementów i jednego formatowania daty. Wszystkie skrypty
+w \texttt{<head>} blokowały parsowanie HTML, \texttt{analytics.js} dodatkowo
+wykonywał aktywne oczekiwanie przez 100\,ms, a \texttt{style.css} dołączał
+\texttt{theme.css} przez \texttt{@import} (dodatkowy, szeregowy odnośnik).
+Animacja stopki była realizowana przez \texttt{setInterval} co 30\,ms,
+który przez jQuery przepisywał \texttt{background} i \texttt{box-shadow}
+(wymuszając przemalowanie, także w ukrytej karcie), a zdarzenie \texttt{mousemove}
+nie było ograniczone. Treść wpisów była wstawiana jako ciąg HTML.
+
+Zmiany:
+\begin{itemize}
+  \item usunięto wszystkie biblioteki (katalog \texttt{public/vendor});
+    Bootstrap CSS zastąpiono własnym arkuszem (pasek nawigacji, kontener, siatka CSS Grid, karta),
+    Bootstrap JS -- kilkoma liniami obsługi przełącznika menu, Font Awesome -- trzema ikonami
+    jako inline SVG, jQuery -- \texttt{fetch} i DOM API, moment.js -- \texttt{Intl.DateTimeFormat},
+  \item \texttt{theme.css} wbudowano w \texttt{style.css} (brak \texttt{@import}),
+  \item skrypt \texttt{app.js} ładowany z \texttt{defer}, a \texttt{analytics.js} dopiero po zdarzeniu
+    \texttt{load}, w czasie bezczynności przeglądarki (\texttt{requestIdleCallback});
+    zdarzenia zgłoszone wcześniej trafiają do kolejki; usunięto aktywne oczekiwanie 100\,ms,
+  \item dodano \texttt{<meta name="viewport">} i ikonę strony (unika zbędnego żądania \texttt{/favicon.ico} kończącego się 404),
+  \item animacja stopki jako CSS \texttt{@keyframes} z \texttt{filter: hue-rotate()}
+    na pseudo-elemencie, wstrzymywana poza ekranem (\texttt{IntersectionObserver}),
+    w ukrytej karcie i przy \texttt{prefers-reduced-motion}; położenie kursora
+    przekazywane zmienną CSS \texttt{--glow}, ograniczone do jednej aktualizacji na klatkę
+    (\texttt{requestAnimationFrame}), z zapamiętanym \texttt{getBoundingClientRect()},
+  \item treść wpisów wstawiana przez \texttt{textContent}, nie przez konkatenację HTML;
+    pierwsze zdjęcie ładowane od razu, kolejne z \texttt{loading="lazy"}.
+\end{itemize}
+
+\subsubsection{Konfiguracja i parametry}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l p{9cm}}
+\toprule
+\textbf{Było} & \textbf{Jest} \\
+\midrule
+\texttt{\$.getJSON(url, cb)} & \texttt{fetch(url).then(r => r.json())} \\
+\texttt{\$('\#id').append(html)} & \texttt{createElement}, \texttt{textContent}, \texttt{appendChild} \\
+\texttt{moment(d).format('D MMMM YYYY')} & \texttt{Intl.DateTimeFormat('pl-PL', \{day, month: 'long', year\})} \\
+\texttt{data-bs-toggle="collapse"} & \texttt{classList.toggle('show')} \\
+\texttt{<i class="fa-regular fa-calendar">} & inline \texttt{<svg>} z \texttt{fill="currentColor"} \\
+\texttt{class="row g-4"}, \texttt{col-md-6} & \texttt{display:grid} z \texttt{@media (min-width: 768px)} \\
+\texttt{setInterval(30 ms)} + \texttt{.css()} & \texttt{@keyframes} + \texttt{hue-rotate}, \texttt{IntersectionObserver} \\
+\texttt{mousemove} + \texttt{text-shadow} z JS & zmienna CSS \texttt{--glow} ustawiana w \texttt{requestAnimationFrame} \\
+skrypty w \texttt{<head>} bez atrybutów & \texttt{defer} (\texttt{app.js}), ładowanie po \texttt{load} (analityka) \\
+\bottomrule
+\end{tabular}
+\caption{Zamienniki użytych funkcji}
+\end{tablehere}
+
+Zmiany widoczne dla użytkownika: daty są po polsku (np.\ „10 stycznia 2026” zamiast
+„10 January 2026”), ikony są prostsze niż w Font Awesome, a pulsowanie cienia stopki
+(zmienna wielkość) zastąpiono stałym cieniem.
+
+\subsubsection{Wyniki pomiarów}
+
+Rozmiary bez kompresji transportowej. Czcionki Font Awesome faktycznie pobierane
+przez przeglądarkę to tylko \texttt{fa-regular-400.woff2}.
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Zasób} & \textbf{Przed [B]} & \textbf{Po [B]} & \textbf{Redukcja} \\
+\midrule
+CSS (Bootstrap, Font Awesome, \texttt{style.css}, \texttt{theme.css}) + czcionka & 430\,847 & 3\,695 & 99,1\% \\
+JS (Bootstrap, jQuery, moment.js, \texttt{app.js}, \texttt{analytics.js}) & 679\,267 & 4\,149 & 99,4\% \\
+\midrule
+\textbf{Razem} & \textbf{1\,110\,114} & \textbf{7\,844} & \textbf{99,3\%} \\
+\bottomrule
+\end{tabular}
+\caption{Rozmiary CSS, JS i czcionek przed i po optymalizacji}
+\end{tablehere}
+
+Liczba żądań o zasoby statyczne spadła z 10 (Bootstrap CSS, Font Awesome CSS, czcionka,
+\texttt{style.css}, \texttt{theme.css}, trzy skrypty biblioteczne, \texttt{app.js},
+\texttt{analytics.js}) do 3 (\texttt{style.css}, \texttt{app.js}, \texttt{analytics.js}),
+przy czym tylko dwa pierwsze są potrzebne do pierwszego renderowania.
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{Metryka} & \textbf{PSI mobile} & \textbf{PSI desktop} & \textbf{GTmetrix} & \textbf{Zmiana vs. stan wyjściowy} & \textbf{Uwagi} \\
+\midrule
+LCP [s]        & [—] & [—] & [—] & [—] & [—] \\
+TBT [ms]       & [—] & [—] & [—] & [—] & [—] \\
+CLS            & [—] & [—] & [—] & [—] & [—] \\
+FCP [s]        & [—] & [—] & [—] & [—] & [—] \\
+Speed Index [s]& [—] & [—] & [—] & [—] & [—] \\
+\midrule
+Wynik wydajności (0–100) & [—] & [—] & [—] & [—] & [—] \\
+Rozmiar strony [MB]      & —   & —   & [—] & [—] & [—] \\
+Liczba żądań HTTP        & —   & —   & [—] & [—] & [—] \\
+Aktywność wątku głównego w bezczynności [\%] & — & — & [—] & [—] & [—] \\
+\bottomrule
+\end{tabular}
+\caption{Wyniki pomiarów dla optymalizacji front-endu}
+\end{tablehere}
+
+\subsubsection{Wnioski}
+
+Zasoby front-endowe skurczyły się z ok.\ 1,06\,MiB do ok.\ 7,7\,KiB. Przeglądarka nie
+musi już pobierać, parsować i wykonywać czterech bibliotek przed pierwszym renderowaniem,
+nie ma aktywnego oczekiwania ani synchronicznych skryptów w \texttt{<head>}, a w stanie
+bezczynności animacja stopki nie obciąża wątku głównego (wyjątek: synchroniczny XHR w
+\texttt{analytics.js}, który należy do optymalizacji sieci). Dodatkowo usunięto
+podatność na wstrzyknięcie HTML przez treść wpisów.
+
+Koszt to utrzymywanie własnego CSS i kodu pośredniczącego zamiast sprawdzonych bibliotek
+oraz drobne różnice wizualne. Dla tak małej, jednostronicowej aplikacji jest to
+opłacalne. Nie wykonano minifikacji ani pakowania (bundling), więc dalszy zysk jest możliwy
+po dodaniu narzędzia budującego; własne pliki mają niewielki rozmiar.
