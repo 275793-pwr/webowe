@@ -1,0 +1,132 @@
+% Wymaga: booktabs. Nie wymaga pakietu float.
+\makeatletter
+\@ifundefined{tablehere}{\newenvironment{tablehere}{\par\vskip\intextsep\def\@captype{table}\begin{center}}{\end{center}\par\vskip\intextsep}}{}
+\makeatother
+
+
+\subsection{Optymalizacja sieci i serwera}
+\subsubsection{Opis optymalizacji}
+
+W pierwotnej wersji serwisu strona pobierała najpierw listę wpisów (\texttt{GET /api/posts},
+zwracającą tylko identyfikatory i tytuły), a następnie pięć kolejnych, wykonywanych
+jeden po drugim żądań o szczegóły każdego wpisu (problem N+1). Przy symulowanym opóźnieniu
+50--150\,ms na żądanie dawało to ponad 600\,ms łańcucha żądań. Serwer nie kompresował
+odpowiedzi, nie wysyłał nagłówków \texttt{Cache-Control} (powtórne odwiedziny
+ponownie walidowały lub pobierały zasoby), a przy każdym żądaniu i zdarzeniu
+analitycznym wykonywał synchroniczny zapis na dysk (\texttt{appendFileSync}),
+który blokował pętlę zdarzeń. Klient wysyłał zdarzenia synchronicznym
+\texttt{XMLHttpRequest}, blokującym wątek główny przeglądarki.
+
+Zmiany:
+\begin{itemize}
+  \item \texttt{GET /api/posts} zwraca pełne wpisy; klient wykonuje jedno żądanie
+    zamiast sześciu,
+  \item kompresja odpowiedzi tekstowych (Brotli lub gzip, zależnie od
+    \texttt{Accept-Encoding}) z użyciem wbudowanego modułu \texttt{zlib},
+  \item nagłówki cache'ujące (patrz tabela poniżej),
+  \item logi zapisywane przez strumienie \texttt{fs.createWriteStream} w trybie dopisywania,
+  \item zdarzenia wysyłane przez \texttt{navigator.sendBeacon} (z \texttt{fetch}
+    z \texttt{keepalive} jako zapasowym rozwiązaniem) zamiast synchronicznego XHR,
+  \item obraz Dockera: \texttt{node:20-alpine}, instalacja zależności
+    (\texttt{npm ci --omit=dev}) przed skopiowaniem kodu oraz \texttt{HEALTHCHECK}.
+\end{itemize}
+
+\subsubsection{Konfiguracja i parametry}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l p{9cm}}
+\toprule
+\textbf{Zasób} & \textbf{Nagłówek} \\
+\midrule
+HTML, własne CSS i JS & \texttt{Cache-Control: no-cache} -- przeglądarka zawsze pyta
+  o ważność (ETag), a przy braku zmian dostaje \texttt{304} bez treści; nazwy plików
+  nie zawierają skrótu, więc dłuższe cache'owanie mogłoby serwować nieaktualną wersję \\
+Biblioteki, obrazy, wideo, czcionki & \texttt{public, max-age=31536000, immutable}
+  -- bez ponownych żądań przez rok (zmianę pliku trzeba wykonać pod nową nazwą) \\
+\texttt{/api/posts} & \texttt{public, max-age=60, stale-while-revalidate=600} --
+  przez minutę odpowiedź z cache, potem do 10 minut serwowana z cache
+  przy odświeżaniu w tle \\
+\bottomrule
+\end{tabular}
+\caption{Polityka cache'owania}
+\end{tablehere}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l p{9cm}}
+\toprule
+\textbf{Parametr} & \textbf{Znaczenie} \\
+\midrule
+\texttt{Accept-Encoding} & wybór Brotli (\texttt{br}) lub gzip; bez obsługi -- odpowiedź bez kompresji \\
+\texttt{BROTLI\_PARAM\_QUALITY: 4} & niski poziom kompresji Brotli -- dobry kompromis
+  między stopniem kompresji a obciążeniem CPU przy kompresji w locie \\
+\texttt{Vary: Accept-Encoding} & cache pośredni rozróżnia wersje skompresowane i nie \\
+\texttt{COMPRESSIBLE} & kompresowane są tylko typy tekstowe (HTML, CSS, JS, JSON, SVG); obrazy i wideo
+  są już skompresowane \\
+\texttt{flags: 'a'} & strumień dopisujący do pliku; zapis asynchroniczny \\
+\bottomrule
+\end{tabular}
+\caption{Parametry kompresji i logowania}
+\end{tablehere}
+
+Kompresję zaimplementowano własnym oprogramowaniem pośredniczącym na \texttt{zlib},
+aby nie dodawać zależności do \texttt{package.json}.
+
+\subsubsection{Wyniki pomiarów}
+
+Pomiary teoretyczne wynikają z liczby żądań i symulowanego opóźnienia; rozmiary skompresowane
+nie zostały jeszcze zmierzone (patrz tabela wyników).
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l r r}
+\toprule
+\textbf{Wielkość} & \textbf{Przed} & \textbf{Po} \\
+\midrule
+Żądania API przy ładowaniu & 6 (szeregowo) & 1 \\
+Opóźnienie symulowane (średnio) & ok.\ 6\,$\times$\,100\,ms = 600\,ms & ok.\ 100\,ms \\
+Zapisy synchroniczne na dysk & 1 na żądanie i zdarzenie & 0 \\
+Synchroniczny XHR w przeglądarce & 1 & 0 \\
+Kompresja tekstu & brak & br / gzip \\
+Powtórna wizyta & ponowny transfer lub walidacja wszystkich zasobów & \texttt{304} dla HTML/CSS/JS, reszta z cache \\
+\bottomrule
+\end{tabular}
+\caption{Zmiany w liczbie żądań i kosztach serwera}
+\end{tablehere}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{Metryka} & \textbf{PSI mobile} & \textbf{PSI desktop} & \textbf{GTmetrix} & \textbf{Zmiana vs. stan wyjściowy} & \textbf{Uwagi} \\
+\midrule
+LCP [s]        & [—] & [—] & [—] & [—] & [—] \\
+TBT [ms]       & [—] & [—] & [—] & [—] & [—] \\
+CLS            & [—] & [—] & [—] & [—] & [—] \\
+FCP [s]        & [—] & [—] & [—] & [—] & [—] \\
+Speed Index [s]& [—] & [—] & [—] & [—] & [—] \\
+\midrule
+Wynik wydajności (0–100) & [—] & [—] & [—] & [—] & [—] \\
+Rozmiar strony [MB]      & —   & —   & [—] & [—] & [—] \\
+Liczba żądań HTTP        & —   & —   & [—] & [—] & [—] \\
+Transfer przy powtórnej wizycie [KB] & — & — & [—] & [—] & [—] \\
+\texttt{/api/posts} p95 [ms] & — & — & [—] & [—] & [—] \\
+\bottomrule
+\end{tabular}
+\caption{Wyniki pomiarów dla optymalizacji sieci i serwera}
+\end{tablehere}
+
+\subsubsection{Wnioski}
+
+Największy zysk w czasie ładowania daje usunięcie wzorca N+1: sześć szeregowych
+żądań zastąpiono jednym. Kompresja zmniejsza transfer plików tekstowych, a
+cache'owanie sprawia, że powtórne odwiedziny prawie nic nie kosztują. Zamiana
+zapisów synchronicznych na strumienie i synchronicznego XHR na \texttt{sendBeacon}
+usuwa blokowanie pętli zdarzeń serwera oraz wątku głównego przeglądarki.
+
+Ograniczeniem jest brak skrótów w nazwach plików własnego CSS i JS (dlatego
+używają walidacji, a nie \texttt{immutable}) oraz to, że zmiana obrazu lub filmu
+wymaga zmiany jego nazwy. Dane o rozmiarach po kompresji i czasach należy uzupełnić
+po pomiarach. Zmiany nie obejmują samych mediów ani bibliotek front-endowych --
+to osobne optymalizacje.
