@@ -1,8 +1,44 @@
-@import url("/css/theme.css");
+/* Replacement for the used parts of Bootstrap (navbar, container, grid, card, utilities);
+   theme.css is inlined here (no @import round trip). */
+h1, h2 { color: #223; }
+time { color: #777; font-size: 0.9em; }
 
+*, *::before, *::after { box-sizing: border-box; }
 html, body { background: transparent; }  /* let the background video show through */
-body { font-family: Arial, sans-serif; }
-.card { background: rgba(255,255,255,.95); }
+body { margin: 0; font-family: Arial, sans-serif; line-height: 1.5; color: #212529; }
+a { color: #0d6efd; }
+.icon { width: 1em; height: 1em; vertical-align: -.125em; }
+
+.container { width: 100%; max-width: 1140px; margin: 0 auto; padding: 0 12px; }
+.main { padding-block: 24px; }
+
+.navbar { background: #212529; padding: 8px 0; }
+.navbar .container { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.navbar-brand { color: #fff; font-size: 1.25rem; text-decoration: none; }
+.navbar-toggler { padding: 4px 10px; background: none; border: 1px solid rgba(255,255,255,.3); border-radius: 6px; color: #fff; cursor: pointer; }
+.navbar-toggler-icon { display: block; width: 1.5em; height: 1.5em;
+  background: linear-gradient(#fff 0 0) 0 20% / 100% 2px no-repeat, linear-gradient(#fff 0 0) 0 50% / 100% 2px no-repeat, linear-gradient(#fff 0 0) 0 80% / 100% 2px no-repeat; }
+.navbar-collapse { display: none; flex-basis: 100%; }
+.navbar-collapse.show { display: block; }
+.navbar-nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.nav-link { display: block; padding: 8px 0; color: rgba(255,255,255,.65); text-decoration: none; }
+.nav-link:hover { color: rgba(255,255,255,.9); }
+@media (min-width: 992px) {
+  .navbar-toggler { display: none; }
+  .navbar-collapse { display: flex; flex-basis: auto; flex-grow: 1; }
+  .navbar-nav { flex-direction: row; }
+  .nav-link { padding: 8px; }
+}
+
+.grid { display: grid; gap: 24px; grid-template-columns: 1fr; }
+@media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
+
+.card { display: flex; flex-direction: column; background: rgba(255,255,255,.95); border: 1px solid rgba(0,0,0,.175); border-radius: 6px; overflow: hidden; }
+.card-img-top { width: 100%; height: auto; display: block; }
+.card-body { padding: 16px; }
+.card-title { margin: 0 0 8px; font-size: 1.25rem; font-weight: 500; line-height: 1.2; }
+.card-text { margin: 8px 0; }
+.text-muted { color: #6c757d; font-size: .875em; }
 
 #bg-video {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -12,9 +48,21 @@ body { font-family: Arial, sans-serif; }
   transform: scale(1.05);     /* hides the soft edges the blur creates at the viewport border */
 }
 
+/* Footer: the gradient lives on a pseudo-element whose hue is rotated by a CSS animation
+   (compositor-friendly, no JS timer); the cursor glow is driven by the --glow variable. */
 #glow-footer {
-  color: #fff; font-size: 1.2rem; position: relative;
-  background: linear-gradient(90deg, #ff0080, #7928ca, #2afadf);
+  color: #fff; font-size: 1.2rem; position: relative; isolation: isolate; text-align: center; padding: 48px 12px;
+  text-shadow: 0 0 12px #fff, calc((var(--glow, 50) - 50) / 2 * 1px) 0 20px #fff;
 }
-/* PERF: box-shadow (also animated from JS) is paint-heavy, not compositor-only. */
-#glow-footer:hover { box-shadow: 0 0 60px 20px #ff0080 inset; }
+#glow-footer::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(90deg, hsl(0,100%,50%), hsl(120,100%,50%), hsl(240,100%,50%));
+  box-shadow: 0 0 30px hsl(0,100%,60%) inset;
+  animation: hue 3.6s linear infinite;
+}
+#glow-footer.paused::before { animation-play-state: paused; }
+#glow-footer:hover::before { box-shadow: 0 0 60px 20px #ff0080 inset; }
+@keyframes hue { to { filter: hue-rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #glow-footer::before { animation: none; } }
+.footer-note { font-size: .875em; margin-top: 8px; }
+.footer-note a { color: #fff; }

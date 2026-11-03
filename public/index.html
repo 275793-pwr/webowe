@@ -3,51 +3,49 @@
 <head>
   <meta charset="utf-8">
   <title>Wrocław bez tajemnic</title>
-  <!-- PERF: no viewport meta, no favicon, no preload/preconnect hints. -->
-
-  <!-- PERF: all vendor CSS/JS is loaded in <head> and blocks first paint. Everything is unminified,
-       self-hosted on the slow origin (no CDN), and mostly unused (Bootstrap grid/components, ~1500 icons). -->
-  <link rel="stylesheet" href="/vendor/bootstrap.css">
-  <link rel="stylesheet" href="/vendor/fontawesome/css/all.css"> <!-- PERF: whole icon set + 4 webfonts for a handful of icons -->
-
-  <!-- PERF: style.css also @imports theme.css, which delays it by an extra round trip. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 3h10v10H3a1 1 0 0 1-1-1zm10 2h2v7a1 1 0 0 1-1 1h-1z' fill='%23212529'/%3E%3C/svg%3E">
+  <!-- Bootstrap, Font Awesome, jQuery and moment.js are replaced by one small stylesheet,
+       inline SVG icons and vanilla JS. -->
   <link rel="stylesheet" href="/css/style.css">
 
-  <!-- PERF: render-blocking scripts (no defer/async). -->
-  <script src="/vendor/jquery.js"></script>
-  <script src="/vendor/bootstrap.bundle.js"></script>
-  <script src="/vendor/moment.js"></script>
-  <script src="/js/analytics.js"></script>
+  <!-- Analytics is not on the critical path: events are queued here and the tag is loaded when the browser is idle. -->
+  <script>
+    window.track = function (e) { (window.__trackQ = window.__trackQ || []).push([e, Date.now()]); };
+    addEventListener('load', function () {
+      var load = function () { var s = document.createElement('script'); s.src = '/js/analytics.js'; s.async = true; document.head.appendChild(s); };
+      window.requestIdleCallback ? requestIdleCallback(load, { timeout: 3000 }) : setTimeout(load, 1);
+    });
+  </script>
+  <script src="/js/app.js" defer></script>
 </head>
 <body>
   <!-- PERF: 2.3 GB video used as a full-screen background: autoplay, preload="auto", no poster,
        single MP4 format, always decoding behind the page; it competes with the post images and API calls for bandwidth. -->
   <video src="/video/1.webm" autoplay muted loop preload="auto" playsinline id="bg-video"></video>
 
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+  <nav class="navbar">
     <div class="container">
-      <a class="navbar-brand" href="#"><i class="fa-solid fa-newspaper"></i> Wrocław bez tajemnic</a>
-      <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav"><span class="navbar-toggler-icon"></span></button>
-      <div class="collapse navbar-collapse" id="nav">
-        <ul class="navbar-nav me-auto">
-          <li class="nav-item"><a class="nav-link" href="#posts">Posts</a></li>
+      <a class="navbar-brand" href="#"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h10v10H3a1 1 0 0 1-1-1zm10 2h2v7a1 1 0 0 1-1 1h-1zM4 5h6v2H4zm0 3h6v1H4zm0 2h6v1H4z" fill="currentColor"/></svg> Wrocław bez tajemnic</a>
+      <button class="navbar-toggler" type="button" aria-controls="nav" aria-expanded="false" aria-label="Menu"><span class="navbar-toggler-icon"></span></button>
+      <div class="navbar-collapse" id="nav">
+        <ul class="navbar-nav">
+          <li><a class="nav-link" href="#posts">Posts</a></li>
         </ul>
       </div>
     </div>
   </nav>
 
-  <main class="container my-4">
-    <div id="posts" class="row g-4"></div>
+  <main class="container main">
+    <div id="posts" class="grid"></div>
   </main>
 
-  <footer id="glow-footer" class="text-center py-5">&copy; <span id="year"></span> Wrocław bez tajemnic
-    <div class="small mt-2">
-      Wideo w tle: <a href="https://www.youtube.com/watch?v=y0zmzO-t2XM" target="_blank" rel="noopener" class="text-white">YouTube</a>
+  <footer id="glow-footer">&copy; <span id="year"></span> Wrocław bez tajemnic
+    <div class="footer-note">
+      Wideo w tle: <a href="https://www.youtube.com/watch?v=y0zmzO-t2XM" target="_blank" rel="noopener">YouTube</a>
       &middot; Autorzy: Mateusz Szwedka, Ivan Hancharyk, Jędrzej Kozina
     </div>
   </footer>
 
-  <!-- PERF: unminified, unbundled scripts at the end of body, not deferred. -->
-  <script src="/js/app.js"></script>
 </body>
 </html>
