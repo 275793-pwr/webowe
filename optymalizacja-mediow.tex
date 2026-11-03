@@ -1,0 +1,136 @@
+% Wymaga: booktabs. Nie wymaga pakietu float.
+\makeatletter
+\@ifundefined{tablehere}{\newenvironment{tablehere}{\par\vskip\intextsep\def\@captype{table}\begin{center}}{\end{center}\par\vskip\intextsep}}{}
+\makeatother
+
+\subsection{Optymalizacja mediów}
+\subsubsection{Opis optymalizacji}
+
+W pierwotnej wersji serwisu zdjęcia do wpisów były ładowane w oryginalnej postaci
+(wielomegapikselowe pliki JPEG), a tło strony stanowił film \texttt{1.webm}
+o rozmiarze ok.\ 549\,MiB - był to plik 4k bezporednio pobrany z platformy YouTube i nieobrobiony. Tak duże pliki dominowały nad resztą zasobów
+(HTML, CSS, JavaScript), wydłużały czas ładowania strony i zużywały transfer
+użytkowników oraz serwera. Podczas optymalizacji film przeskalowano, rozmyto i silnie
+skompresowano kodekiem VP9, a zdjęcia zmniejszono i zamieniono z JPEG na WebP.
+W pliku \texttt{server/server.js} zmieniono ścieżki zdjęć z \texttt{/img/N.jpg}
+na \texttt{/img/N.webp}.
+
+\subsubsection{Konfiguracja i parametry}
+
+Film przetworzono używajc narzędzia FFMPEG, poleceniem:
+
+\begin{verbatim}
+ffmpeg -y -i 1.webm \
+  -vf "scale=1080:-2:flags=lanczos,fps=24,gblur=sigma=5" \
+  -an -c:v libvpx-vp9 -b:v 0 -crf 46 -row-mt 1 2.webm
+\end{verbatim}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l p{9cm}}
+\toprule
+\textbf{Parametr} & \textbf{Znaczenie} \\
+\midrule
+\texttt{scale=1080:-2} & szerokość 1080\,px, wysokość wyliczana z zachowaniem proporcji
+  (liczba parzysta, której wymaga koder) \\
+\texttt{flags=lanczos} & algorytm Lanczosa przy skalowaniu -- ostrzejszy obraz niż
+  domyślny bikubiczny \\
+\texttt{fps=24} & ograniczenie liczby klatek do 24 na sekundę \\
+\texttt{gblur=sigma=5} & rozmycie Gaussa ($\sigma=5$); film jest tylko
+  rozmytym tłem, więc utrata detali jest niewidoczna, a koder potrzebuje
+  znacznie mniej danych \\
+\texttt{-an} & usunięcie ścieżki dźwiękowej (tło jest niemym wideo) \\
+\texttt{-c:v libvpx-vp9} & kodek wideo VP9 w kontenerze WebM \\
+\texttt{-b:v 0} & brak docelowej przepływności -- w połączeniu z \texttt{-crf}
+  włącza tryb stałej jakości \\
+\texttt{-crf 46} & wysoki współczynnik kompresji (skala VP9: 0--63, im więcej,
+  tym mniejszy plik i niższa jakość) \\
+\texttt{-row-mt 1} & wielowątkowe kodowanie wierszy bloków -- przyspiesza
+  kodowanie, nie wpływa na rozmiar \\
+\bottomrule
+\end{tabular}
+\caption{Parametry konwersji filmu}
+\end{tablehere}
+
+Zdjęcia konwertowano z użyciem narzędzia FFMPEG, poleceniem:
+
+\begin{verbatim}
+ffmpeg -i img/1.jpg -vf "scale=-2:720" \
+  -c:v libwebp -quality 60 img/1.webp
+\end{verbatim}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l p{9cm}}
+\toprule
+\textbf{Parametr} & \textbf{Znaczenie} \\
+\midrule
+\texttt{scale=-2:720} & wysokość 720\,px, szerokość wyliczana automatycznie
+  z zachowaniem proporcji (podzielna przez 2) \\
+\texttt{-c:v libwebp} & kodowanie do formatu WebP \\
+\texttt{-quality 60} & jakość kompresji stratnej w skali 0--100 \\
+\bottomrule
+\end{tabular}
+\caption{Parametry konwersji zdjęć}
+\end{tablehere}
+
+Po konwersji zdjęcia mają rozdzielczość od $476\times720$ do $1188\times720$\,px,
+a film $1080\times608$\,px w kodeku VP9 przy 24\,kl./s.
+
+\subsubsection{Wyniki pomiarów}
+
+(dla filmu -- wskaźnika Git LFS w commicie \texttt{3c11684}).
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l r r r r}
+\toprule
+\textbf{Plik} & \textbf{Przed [B]} & \textbf{Po [B]} & \textbf{Redukcja} & \textbf{Krotność} \\
+\midrule
+\texttt{img/1} & 1\,471\,677 & 29\,294 & 98,0\% & 50,2$\times$ \\
+\texttt{img/2} & 4\,313\,550 & 174\,682 & 96,0\% & 24,7$\times$ \\
+\texttt{img/3} & 2\,233\,630 & 65\,852 & 97,1\% & 33,9$\times$ \\
+\texttt{img/4} & 3\,579\,220 & 74\,292 & 97,9\% & 48,2$\times$ \\
+\texttt{img/5} & 2\,105\,733 & 183\,732 & 91,3\% & 11,5$\times$ \\
+\midrule
+Zdjęcia razem & 13\,703\,810 & 527\,852 & 96,1\% & 26,0$\times$ \\
+\texttt{video/1.webm} & 575\,451\,270 & 2\,312\,460 & 99,6\% & 248,8$\times$ \\
+\midrule
+\textbf{Razem} & \textbf{589\,155\,080} & \textbf{2\,840\,312} & \textbf{99,5\%} & \textbf{207,4$\times$} \\
+\bottomrule
+\end{tabular}
+\caption{Rozmiary mediów przed i po optymalizacji}
+\end{tablehere}
+
+\begin{tablehere}
+\centering
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{Metryka} & \textbf{PSI mobile} & \textbf{PSI desktop} & \textbf{GTmetrix} & \textbf{Zmiana vs. stan wyjściowy} & \textbf{Uwagi} \\
+\midrule
+LCP [s]        & [—] & [—] & [—] & [—] & [—] \\
+TBT [ms]       & [—] & [—] & [—] & [—] & [—] \\
+CLS            & [—] & [—] & [—] & [—] & [—] \\
+FCP [s]        & [—] & [—] & [—] & [—] & [—] \\
+Speed Index [s]& [—] & [—] & [—] & [—] & [—] \\
+\midrule
+Wynik wydajności (0–100) & [—] & [—] & [—] & [—] & [—] \\
+Rozmiar strony [MB]      & —   & —   & [—] & [—] & [—] \\
+Liczba żądań HTTP        & —   & —   & [—] & [—] & [—] \\
+\bottomrule
+\end{tabular}
+\caption{Wyniki pomiarów dla optymalizacji mediów}
+\end{tablehere}
+
+\subsubsection{Wnioski}
+
+Łączny rozmiar mediów spadł z około 561,9\,MiB do 2,7\,MiB. Zdjęcia zmniejszyły się
+średnio 26-krotnie (z 13,1\,MiB do 0,5\,MiB), a film niemal 250-krotnie
+(z 548,8\,MiB do 2,2\,MiB).
+
+Największy zysk dało przetworzenie filmu: ponieważ pełni on rolę rozmytego tła,
+można było bez zauważalnej straty jakości zmniejszyć rozdzielczość, liczbę klatek,
+usunąć dźwięk i zastosować mocną kompresję. W przypadku zdjęć wystarczyło
+ograniczenie wysokości do 720\,px oraz zamiana JPEG na WebP o jakości 60.
+Kosztem jest nieodwracalna utrata szczegółów, dlatego oryginały warto
+przechowywać poza ścieżką serwowaną użytkownikom.
