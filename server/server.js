@@ -28,8 +28,15 @@ app.use((req, res, next) => {
       : zlib.createGzip();
     res.setHeader('Content-Encoding', enc);
     res.removeHeader('Content-Length');
-    stream.on('data', chunk => write(chunk));
+    // Backpressure: res.write() returns the compressor's write() result, so a piped file
+    // (express.static) waits for 'drain' on res; forward the compressor's 'drain' to res,
+    // otherwise any streamed response bigger than the zlib buffer (~16 KB) stalls forever.
+    stream.on('drain', () => res.emit('drain'));
+    // The other direction: pause compression while the socket is full.
+    stream.on('data', chunk => { if (!write(chunk)) stream.pause(); });
+    res.on('drain', () => stream.resume());
     stream.on('end', () => end());
+    stream.on('error', err => res.destroy(err));
     return stream;
   };
   res.write = (chunk, encoding, cb) => { const s = init(); return s ? s.write(chunk, encoding, cb) : write(chunk, encoding, cb); };
